@@ -7,6 +7,7 @@ import { ClubUpdatedEvent } from '../../domain/events/club-updated.event';
 import { CourtUpdatedEvent } from '../../domain/events/court-updated.event';
 import { SlotBookedEvent } from '../../domain/events/slot-booked.event';
 import { SlotAvailableEvent } from '../../domain/events/slot-cancelled.event';
+import { memoryCache } from '../../infrastructure/cache/memory-cache';
 
 const SlotSchema = z.object({
   price: z.number(),
@@ -57,7 +58,12 @@ export class EventsController {
             externalEvent.slot,
           ),
         );
+        this.invalidateCacheByClubAndDate(
+          externalEvent.clubId,
+          externalEvent.slot.datetime,
+        );
         break;
+
       case 'booking_cancelled':
         this.eventBus.publish(
           new SlotAvailableEvent(
@@ -66,12 +72,19 @@ export class EventsController {
             externalEvent.slot,
           ),
         );
+        this.invalidateCacheByClubAndDate(
+          externalEvent.clubId,
+          externalEvent.slot.datetime,
+        );
         break;
+
       case 'club_updated':
         this.eventBus.publish(
           new ClubUpdatedEvent(externalEvent.clubId, externalEvent.fields),
         );
+        this.invalidateCacheByClub(externalEvent.clubId);
         break;
+
       case 'court_updated':
         this.eventBus.publish(
           new CourtUpdatedEvent(
@@ -80,7 +93,28 @@ export class EventsController {
             externalEvent.fields,
           ),
         );
+        this.invalidateCacheByClub(externalEvent.clubId);
         break;
     }
+  }
+
+  private invalidateCacheByClubAndDate(clubId: number, date: string) {
+    const keys = Array.from(memoryCache['cache'].keys());
+    keys.forEach((key) => {
+      if (key.startsWith(`${clubId}-${date}`)) {
+        memoryCache.delete(key);
+        console.log(`Caché invalidado: ${key}`);
+      }
+    });
+  }
+
+  private invalidateCacheByClub(clubId: number) {
+    const keys = Array.from(memoryCache['cache'].keys());
+    keys.forEach((key) => {
+      if (key.startsWith(`${clubId}-`)) {
+        memoryCache.delete(key);
+        console.log(`Caché invalidado: ${key}`);
+      }
+    });
   }
 }
